@@ -31,7 +31,7 @@
 
     <header>
         <h1>VPN Key Aggregator</h1>
-        <p>Сбор конфигураций из репозитория whoahaow через официальный API GitHub</p>
+        <p>Сбор конфигураций из репозитория whoahaow через отказоустойчивый CDN Statically</p>
         
         <button class="start-btn" id="startBtn" onclick="manualStart()">Начать поиск</button>
         
@@ -42,8 +42,9 @@
     <div class="grid" id="container"></div>
 
     <script>
-        const GITHUB_API_URL = 'https://github.com';
-        const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; 
+        // Использование CDN Statically для прямого скачивания файла с GitHub без CORS блокировок
+        const CDN_URL = 'https://statically.io';
+        const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; // 3 часа
         
         let allKeys = [];
         let timeLeft = UPDATE_INTERVAL;
@@ -52,30 +53,26 @@
         function manualStart() {
             document.getElementById('startBtn').style.display = 'none'; 
             document.getElementById('timer').style.display = 'block';
+            // Первое изменение статуса сразу по вашему запросу
             document.getElementById('status').innerText = "Процесс запущен. Пожалуйста, подождите...";
-            fetchKeys(); 
+            
+            // Небольшая задержка, чтобы пользователь успел прочитать первый текст перед началом загрузки
+            setTimeout(fetchKeys, 800); 
         }
 
         async function fetchKeys() {
             const statusEl = document.getElementById('status');
+            // Второе изменение статуса во время непосредственного скачивания данных
             statusEl.innerText = "Процесс запущен...";
             
             try {
-                const response = await fetch(`${GITHUB_API_URL}?t=${Date.now()}`);
-                if (!response.ok) throw new Error("API вернул ошибку");
+                // Добавляем генератор времени, чтобы обойти кэширование CDN серверов
+                const response = await fetch(`${CDN_URL}?t=${Date.now()}`);
+                if (!response.ok) throw new Error("Сбой загрузки данных");
                 
-                const data = await response.json();
-                
-                // Исправленный метод декодирования: удаляем пробелы/переносы строк и безопасно переводим из Base64 в текст UTF-8
-                const base64Clean = data.content.replace(/\s/g, '');
-                const binaryString = atob(base64Clean);
-                const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                }
-                const text = new TextDecoder('utf-8').decode(bytes);
-                
+                const text = await response.text();
                 const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 10);
+                
                 if (lines.length === 0) throw new Error("Файл пуст");
 
                 allKeys = lines.map((key, index) => {
@@ -90,7 +87,7 @@
 
                     let cleanKey = key;
                     if (key.includes('#')) {
-                        cleanKey = key.split('#')[0];
+                        cleanKey = key.split('#');
                     }
                     
                     let finalKey = cleanKey;
@@ -101,13 +98,14 @@
                     return { type, name: newName, rawKey: finalKey };
                 });
 
+                // Третье изменение статуса при успешном финале
                 statusEl.innerText = `🟢 Процесс успешно завершен! Найдено и переименовано ключей: ${allKeys.length}`;
                 render(allKeys);
                 resetTimer();
 
             } catch (error) {
                 console.error(error);
-                statusEl.innerText = "🔴 Ошибка обработки данных. Пожалуйста, попробуйте нажать кнопку еще раз.";
+                statusEl.innerText = "🔴 Ошибка соединения. Пожалуйста, нажмите кнопку еще раз.";
                 document.getElementById('startBtn').style.display = 'inline-block';
                 document.getElementById('timer').style.display = 'none';
             }
