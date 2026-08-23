@@ -31,7 +31,7 @@
 
     <header>
         <h1>VPN Key Aggregator</h1>
-        <p>Сбор конфигураций из репозитория whoahaow через скоростной CDN Statically</p>
+        <p>Сбор конфигураций из репозитория whoahaow через стабильный прокси-канал</p>
         
         <button class="start-btn" id="startBtn" onclick="manualStart()">Начать поиск</button>
         
@@ -42,9 +42,11 @@
     <div class="grid" id="container"></div>
 
     <script>
-        // ИСПРАВЛЕНО: Ссылка переписана строго под правила cdn.statically.io (через @main)
-        const CDN_URL = 'https://statically.io';
-        const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; // 3 часа
+        // Исходная ссылка на txt-файл
+        const RAW_URL = 'https://githubusercontent.com';
+        // Использование безотказного прокси corsproxy.io для сквозного скачивания файлов без ограничений CORS
+        const PROXIED_URL = `https://corsproxy.io{encodeURIComponent(RAW_URL)}`;
+        const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; // Трёхчасовой интервал обновлений
         
         let allKeys = [];
         let timeLeft = UPDATE_INTERVAL;
@@ -54,23 +56,23 @@
             document.getElementById('startBtn').style.display = 'none'; 
             document.getElementById('timer').style.display = 'block';
             
-            // 1. Статус сразу после клика на кнопку
+            // 1. Изменение текста СРАЗУ после клика по зеленой кнопке
             document.getElementById('status').innerText = "Процесс запущен. Пожалуйста, подождите...";
             
-            // Небольшая задержка перед запросом, чтобы текст успел отобразиться
-            setTimeout(fetchKeys, 500); 
+            // Запускаем скачивание с задержкой в 600мс, чтобы текст успел отобразиться на экране
+            setTimeout(fetchKeys, 600); 
         }
 
         async function fetchKeys() {
             const statusEl = document.getElementById('status');
             
-            // 2. Статус непосредственно во время скачивания данных
+            // 2. Статус непосредственно во время обработки и скачивания данных
             statusEl.innerText = "Процесс запущен...";
             
             try {
-                // Добавляем генератор времени против кэширования файлов на серверах CDN
-                const response = await fetch(`${CDN_URL}?t=${Date.now()}`);
-                if (!response.ok) throw new Error("Сбой сети или неверный путь");
+                // Добавляем кэш-бастер времени, чтобы принудительно забирать самый свежий файл из репозитория
+                const response = await fetch(`${PROXIED_URL}&cache=${Date.now()}`);
+                if (!response.ok) throw new Error("Сбой ответа сервера");
                 
                 const text = await response.text();
                 const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 10);
@@ -100,14 +102,14 @@
                     return { type, name: newName, rawKey: finalKey };
                 });
 
-                // 3. Статус при успешном финале
+                // 3. Финальный статус при успешном выводе карточек
                 statusEl.innerText = `🟢 Процесс успешно завершен! Найдено и переименовано ключей: ${allKeys.length}`;
                 render(allKeys);
                 resetTimer();
 
             } catch (error) {
                 console.error(error);
-                statusEl.innerText = "🔴 Ошибка соединения с CDN. Пожалуйста, попробуйте нажать кнопку еще раз.";
+                statusEl.innerText = "🔴 Не удалось подключиться к серверу. Пожалуйста, нажмите кнопку еще раз.";
                 document.getElementById('startBtn').style.display = 'inline-block';
                 document.getElementById('timer').style.display = 'none';
             }
