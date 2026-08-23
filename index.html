@@ -31,7 +31,7 @@
 
     <header>
         <h1>VPN Key Aggregator</h1>
-        <p>Сбор конфигураций из источника bypass-1.txt через стабильный CDN канал</p>
+        <p>Сбор конфигураций из источника bypass-1.txt с защитой от ошибок сети</p>
         
         <button class="start-btn" id="startBtn" onclick="manualStart()">Начать поиск</button>
         
@@ -42,8 +42,9 @@
     <div class="grid" id="container"></div>
 
     <script>
-        // Используем сверхстабильное CDN-зеркало для загрузки файла из репозитория без прокси
-        const DIRECT_CDN_URL = 'https://jsdelivr.net';
+        const SOURCE_URL = 'https://githubusercontent.com';
+        // Использование стабильного CORS-прокси для обхода ограничений безопасности
+        const CORS_PROXY = 'https://workers.dev'; 
         const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; // 3 часа
         
         let allKeys = [];
@@ -59,17 +60,19 @@
 
         async function fetchKeys() {
             const statusEl = document.getElementById('status');
-            statusEl.innerText = "Процесс запущен... Загрузка данных через скоростной канал CDN";
+            statusEl.innerText = "Процесс запущен... Подключение к удаленной базе данных конфигураций";
             
             try {
-                // Добавляем параметр времени, чтобы всегда получать самый свежий файл без кэширования
-                const response = await fetch(`${DIRECT_CDN_URL}?v=${Date.now()}`);
-                if (!response.ok) throw new Error("Ошибка загрузки файла");
+                // Запрос через CORS-прокси с уникальным хвостом времени против кэширования
+                const targetUrl = `${SOURCE_URL}?v=${Date.now()}`;
+                const response = await fetch(CORS_PROXY + targetUrl);
+                
+                if (!response.ok) throw new Error("Сервер не ответил");
                 
                 const text = await response.text();
                 const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 10);
                 
-                if (lines.length === 0) throw new Error("Файл пуст");
+                if (lines.length === 0) throw new Error("Список пуст");
 
                 allKeys = lines.map((key, index) => {
                     let type = "UNKNOWN";
@@ -83,7 +86,7 @@
 
                     let cleanKey = key;
                     if (key.includes('#')) {
-                        cleanKey = key.split('#')[0];
+                        cleanKey = key.split('#');
                     }
                     
                     let finalKey = cleanKey;
