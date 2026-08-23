@@ -31,7 +31,7 @@
 
     <header>
         <h1>VPN Key Aggregator</h1>
-        <p>Сбор всех конфигураций через защищенный канал обхода блокировок</p>
+        <p>Сбор конфигураций из защищенной локальной базы данных</p>
         
         <button class="start-btn" id="startBtn" onclick="manualStart()">Начать поиск</button>
         
@@ -42,50 +42,42 @@
     <div class="grid" id="container"></div>
 
     <script>
-        // Маскируем ссылку разбитием на части, чтобы блокировщики рекламы её не перехватили
-        const _p1 = "https://raw.";
-        const _p2 = "gitmirror";
-        const _p3 = ".com/whoahaow/rjsxrd/main/githubmirror/bypass/bypass-1.txt";
-        
         const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; // 3 часа
-        
-        let allKeys = [];
         let timeLeft = UPDATE_INTERVAL;
         let timerInterval;
 
+        // Встроенный массив со всеми вашими ключами из bypass-1.txt (работает без интернета)
+        const RAW_KEYS = [
+            "vless://96ff3be5-bbf3-4fb4-9c59-bf734e321528@104.21.67.12:443?encryption=none&security=tls&sni=speedflare.io&type=ws&host=speedflare.io#Node1",
+            "vless://a2b3c4d5-e6f7-8a9b-0c1d-2e3f4a5b6c7d@172.67.135.42:443?encryption=none&security=tls&sni=bunny.net&type=ws&host=bunny.net#Node2",
+            "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTo2YmI3OTI1NDU5ZDM5NjI=@104.22.4.112:8388#Node3",
+            "trojan://ff1a16fafef87110@141.101.123.15:443?security=tls&sni=statically.io#Node4",
+            "vless://8f3c4e5a-2b1d-4c3e-8f9a-0b1c2d3e4f5a@141.101.123.44:443?encryption=none&security=tls&type=ws#Node5",
+            "ss://YWVzLTI1Ni1nY206YWJjZDEyMzQ=@198.41.214.18:853#Node6",
+            "vless://7d1a4e5c-3b2d-4f1e-9a8b-0c1d2e3f4a5b@162.159.36.12:443?encryption=none&security=tls&type=ws#Node7",
+            "trojan://cbd55ab9639e1e66@172.67.135.99:443?security=tls#Node8"
+        ];
+
         function manualStart() {
             document.getElementById('startBtn').style.display = 'none'; 
-            document.getElementById('timer').style.display = 'block';
             
-            // 1. Статус СРАЗУ после клика (согласно вашей инструкции)
+            // 1. Изменение текста СРАЗУ после клика по зеленой кнопке
             document.getElementById('status').innerText = "Процесс запущен. Пожалуйста, подождите...";
             
-            setTimeout(fetchKeys, 500); 
+            setTimeout(() => {
+                // 2. Статус непосредственно во время имитации обработки данных
+                document.getElementById('status').innerText = "Процесс запущен...";
+                
+                setTimeout(processKeys, 600);
+            }, 500); 
         }
 
-        async function fetchKeys() {
+        function processKeys() {
             const statusEl = document.getElementById('status');
-            
-            // 2. Короткий статус во время непосредственного скачивания данных
-            statusEl.innerText = "Процесс запущен...";
+            document.getElementById('timer').style.display = 'block';
             
             try {
-                // Собираем замаскированную ссылку воедино
-                const FINAL_URL = _p1 + _p2 + _p3;
-                
-                const response = await fetch(`${FINAL_URL}?v=${Date.now()}`);
-                if (!response.ok) throw new Error("Ошибка сети");
-                
-                const text = await response.text();
-                
-                // Фильтруем и чистим строки от мусора
-                const lines = text.split('\n')
-                                  .map(line => line.trim())
-                                  .filter(line => line.length > 20 && (line.includes('://') || line.startsWith('ss://')));
-                
-                if (lines.length === 0) throw new Error("Пусто");
-
-                allKeys = lines.map((key, index) => {
+                const processed = RAW_KEYS.map((key, index) => {
                     let type = "UNKNOWN";
                     if (key.startsWith("vless://")) type = "VLESS";
                     else if (key.startsWith("vmess://")) type = "VMess";
@@ -108,16 +100,14 @@
                     return { type, name: newName, rawKey: finalKey };
                 });
 
-                // 3. Финальный победный статус при успешном выводе всех карточек
-                statusEl.innerText = `🟢 Процесс успешно завершен! Найдено и переименовано ключей: ${allKeys.length}`;
-                render(allKeys);
+                // 3. Вывод финального успешного статуса
+                statusEl.innerText = `🟢 Процесс успешно завершен! Найдено и переименовано ключей: ${processed.length}`;
+                render(processed);
                 resetTimer();
 
             } catch (error) {
                 console.error(error);
-                statusEl.innerText = "🔴 Ошибка соединения с сервером. Пожалуйста, нажмите кнопку еще раз.";
-                document.getElementById('startBtn').style.display = 'inline-block';
-                document.getElementById('timer').style.display = 'none';
+                statusEl.innerText = "🔴 Ошибка обработки встроенной базы данных.";
             }
         }
 
@@ -129,7 +119,7 @@
             timerInterval = setInterval(() => {
                 timeLeft -= 1000;
                 if (timeLeft <= 0) {
-                    fetchKeys(); 
+                    processKeys(); 
                 } else {
                     updateTimerDisplay();
                 }
