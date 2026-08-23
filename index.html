@@ -11,7 +11,6 @@
         h1 { font-size: 28px; margin-bottom: 10px; color: #38bdf8; }
         p { color: #94a3b8; font-size: 15px; margin-bottom: 20px; }
         
-        /* Кнопка Старта */
         .start-btn { padding: 15px 40px; background: #22c55e; border: none; border-radius: 8px; color: #fff; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 4px 14px rgba(34, 197, 94, 0.4); transition: 0.2s; margin-bottom: 15px; }
         .start-btn:hover { background: #16a34a; transform: scale(1.02); }
         .start-btn:active { transform: scale(0.98); }
@@ -34,7 +33,6 @@
         <h1>VPN Key Aggregator</h1>
         <p>Сбор конфигураций из источника bypass-1.txt с защитой от ошибок сети</p>
         
-        <!-- Новая кнопка ручного запуска -->
         <button class="start-btn" id="startBtn" onclick="manualStart()">Начать поиск</button>
         
         <div class="status" id="status">Нажмите кнопку выше, чтобы запустить поиск ключей...</div>
@@ -45,13 +43,12 @@
 
     <script>
         const SOURCE_URL = 'https://githubusercontent.com';
-        const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; // 3 часа
+        const UPDATE_INTERVAL = 3 * 60 * 60 * 1000;
         
         let allKeys = [];
         let timeLeft = UPDATE_INTERVAL;
         let timerInterval;
 
-        // Список резервных CORS-прокси для стопроцентной стабильности
         const PROXIES = [
             (url) => `https://corsproxy.io{encodeURIComponent(url)}`,
             (url) => `https://codetabs.com{encodeURIComponent(url)}`,
@@ -59,34 +56,36 @@
         ];
 
         function manualStart() {
-            document.getElementById('startBtn').style.display = 'none'; // Скрываем кнопку после нажатия
-            document.getElementById('timer').style.style.display = 'block'; // Показываем таймер
-            fetchKeysWithRetry(0); // Запускаем загрузку с первого прокси
+            document.getElementById('startBtn').style.display = 'none'; 
+            document.getElementById('timer').style.display = 'block';
+            // Сразу меняем текст при нажатии, убирая упоминание кнопки
+            document.getElementById('status').innerText = "Процесс запущен. Пожалуйста, подождите...";
+            fetchKeysWithRetry(0); 
         }
 
-        // Умная функция загрузки: если один прокси падает, берет следующий
         async function fetchKeysWithRetry(proxyIndex) {
             const statusEl = document.getElementById('status');
             
             if (proxyIndex >= PROXIES.length) {
-                statusEl.innerText = "🔴 Все резервные серверы перегружены. Попробуйте нажать кнопку еще раз через минуту.";
+                statusEl.innerText = "🔴 Все резервные серверы перегружены. Пожалуйста, попробуйте снова чуть позже.";
                 document.getElementById('startBtn').style.display = 'inline-block';
+                document.getElementById('timer').style.display = 'none';
                 return;
             }
 
-            statusEl.innerText = `Поиск ключей (используется резервный канал ${proxyIndex + 1})...`;
+            statusEl.innerText = `Процесс запущен... (Используется канал связи ${proxyIndex + 1})`;
             
             try {
                 const cacheBuster = `?cb=${Date.now()}`;
                 const proxyUrl = PROXIES[proxyIndex](SOURCE_URL + cacheBuster);
                 
                 const response = await fetch(proxyUrl);
-                if (!response.ok) throw new Error("Ошибка прокси-сервера");
+                if (!response.ok) throw new Error("Ошибка прокси");
                 
                 const text = await response.text();
                 const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 10);
                 
-                if (lines.length === 0) throw new Error("Файл пуст");
+                if (lines.length === 0) throw new Error("Пусто");
 
                 allKeys = lines.map((key, index) => {
                     let type = "UNKNOWN";
@@ -100,7 +99,7 @@
 
                     let cleanKey = key;
                     if (key.includes('#')) {
-                        cleanKey = key.split('#')[0];
+                        cleanKey = key.split('#');
                     }
                     
                     let finalKey = cleanKey;
@@ -111,13 +110,13 @@
                     return { type, name: newName, rawKey: finalKey };
                 });
 
-                statusEl.innerText = `✨ Успешно найдено и переименовано ключей: ${allKeys.length}`;
+                // Новый текст об успешном завершении процесса
+                statusEl.innerText = `🟢 Процесс успешно завершен! Найдено и переименовано ключей: ${allKeys.length}`;
                 render(allKeys);
                 resetTimer();
 
             } catch (error) {
-                console.warn(`Прокси ${proxyIndex + 1} дал сбой, переключаемся...`);
-                // Рекурсивный переход к следующему источнику при ошибке
+                console.warn(`Канал ${proxyIndex + 1} занят, переключаемся...`);
                 fetchKeysWithRetry(proxyIndex + 1);
             }
         }
@@ -130,7 +129,7 @@
             timerInterval = setInterval(() => {
                 timeLeft -= 1000;
                 if (timeLeft <= 0) {
-                    fetchKeysWithRetry(0); // Автообновление через 3 часа начнется автоматом
+                    fetchKeysWithRetry(0); 
                 } else {
                     updateTimerDisplay();
                 }
