@@ -10,12 +10,11 @@
         header { text-align: center; max-width: 600px; margin: 0 auto 30px auto; }
         h1 { font-size: 28px; margin-bottom: 10px; color: #38bdf8; }
         p { color: #94a3b8; font-size: 15px; margin-bottom: 15px; }
-        .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
-        input { flex: 1; max-width: 300px; padding: 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 14px; }
+        .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 10px; }
+        input { flex: 1; max-width: 400px; padding: 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 14px; text-align: center; }
         input:focus { outline: none; border-color: #38bdf8; }
-        button { padding: 12px 20px; background: #38bdf8; border: none; border-radius: 8px; color: #0f172a; font-weight: bold; cursor: pointer; font-size: 14px; }
-        button:hover { background: #0ea5e9; }
-        .status { text-align: center; color: #94a3b8; margin-bottom: 20px; font-size: 14px; }
+        .status { text-align: center; color: #38bdf8; margin-bottom: 5px; font-size: 14px; font-weight: 500; }
+        .timer { text-align: center; color: #64748b; margin-bottom: 20px; font-size: 12px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; max-width: 1200px; margin: 0 auto; }
         .card { background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 12px; display: flex; flex-direction: column; justify-content: space-between; }
         .type-badge { display: inline-block; padding: 4px 8px; background: #0369a1; color: #e0f2fe; border-radius: 6px; font-size: 11px; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; align-self: flex-start; }
@@ -30,38 +29,37 @@
 
     <header>
         <h1>VPN Key Aggregator</h1>
-        <p>Автоматический поиск конфигураций и переименование в «Бесплатный VPN»</p>
+        <p>Ключи загружаются, переименовываются и обновляются автоматически</p>
         <div class="controls">
-            <input type="text" id="search" placeholder="Поиск по номеру или типу..." oninput="filterKeys()">
-            <button onclick="fetchKeys()">Обновить</button>
+            <input type="text" id="search" placeholder="Быстрый поиск по номеру или типу (например: VLESS)..." oninput="filterKeys()">
         </div>
-        <div class="status" id="status">Нажмите «Обновить» для загрузки ключей...</div>
+        <div class="status" id="status">Автоматический поиск и обработка конфигураций...</div>
+        <div class="timer" id="timer">До обновления: 03:00:00</div>
     </header>
 
     <div class="grid" id="container"></div>
 
     <script>
-        // Открытый источник конфигураций
         const SOURCE_URL = 'https://githubusercontent.com';
+        const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; // 3 часа в миллисекундах
         
         let allKeys = [];
+        let timeLeft = UPDATE_INTERVAL;
+        let timerInterval;
 
-        async function fetchKeys() {
+        async function autoFetchKeys() {
             const statusEl = document.getElementById('status');
-            const containerEl = document.getElementById('container');
-            statusEl.innerText = "Поиск и обработка ключей...";
-            containerEl.innerHTML = "";
-
+            statusEl.innerText = "Обновление базы данных ключей...";
             try {
-                // Запрос к источнику через CORS-прокси
-                const response = await fetch('https://allorigins.win' + encodeURIComponent(SOURCE_URL));
+                // Добавляем случайный параметр к URL, чтобы обойти кэш браузера и всегда получать свежие ключи
+                const cacheBuster = `&cb=${Date.now()}`;
+                const response = await fetch('https://allorigins.win' + encodeURIComponent(SOURCE_URL) + cacheBuster);
                 if (!response.ok) throw new Error("Ошибка сети");
                 
                 const text = await response.text();
                 const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 10);
                 
                 allKeys = lines.map((key, index) => {
-                    // 1. Находим и определяем тип протокола
                     let type = "UNKNOWN";
                     if (key.startsWith("vless://")) type = "VLESS";
                     else if (key.startsWith("vmess://")) type = "VMess";
@@ -69,17 +67,13 @@
                     else if (key.startsWith("ssr://")) type = "Shadowsocks R";
                     else if (key.startsWith("trojan://")) type = "Trojan";
 
-                    // Новое название для карточки
                     const newName = `Бесплатный VPN #${index + 1}`;
 
-                    // 2. Очищаем сам ключ от старого названия (удаляем всё после знака #)
                     let cleanKey = key;
                     if (key.includes('#')) {
                         cleanKey = key.split('#')[0];
                     }
                     
-                    // 3. Добавляем новое имя прямо внутрь строки ключа (чтобы при импорте в приложение имя тоже менялось)
-                    // Для vmess имя обычно зашито внутри base64, для остальных — идет после знака #
                     let finalKey = cleanKey;
                     if (type !== "VMess") {
                         finalKey = `${cleanKey}#${encodeURIComponent(newName)}`;
@@ -88,13 +82,38 @@
                     return { type, name: newName, rawKey: finalKey };
                 });
 
-                statusEl.innerText = `Успешно найдено и переименовано ключей: ${allKeys.length}`;
+                statusEl.innerText = `✨ Найдено и переименовано ключей: ${allKeys.length}`;
                 render(allKeys);
+                resetTimer();
 
             } catch (error) {
                 console.error(error);
-                statusEl.innerText = "Ошибка поиска данных. Попробуйте еще раз.";
+                statusEl.innerText = "🔴 Ошибка обновления данных. Попробуем снова через 3 часа.";
             }
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            timeLeft = UPDATE_INTERVAL;
+            updateTimerDisplay();
+            
+            timerInterval = setInterval(() => {
+                timeLeft -= 1000;
+                if (timeLeft <= 0) {
+                    autoFetchKeys();
+                } else {
+                    updateTimerDisplay();
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+            const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
+            
+            const pad = (num) => String(num).padStart(2, '0');
+            document.getElementById('timer').innerText = `Следующее автообновление через: ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
         }
 
         function render(data) {
@@ -144,6 +163,8 @@
         function escapeHtml(text) {
             return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         }
+
+        window.onload = autoFetchKeys;
     </script>
 </body>
 </html>
