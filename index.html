@@ -9,9 +9,15 @@
         body { background: #0f172a; color: #e2e8f0; padding: 20px; }
         header { text-align: center; max-width: 600px; margin: 0 auto 30px auto; }
         h1 { font-size: 28px; margin-bottom: 10px; color: #38bdf8; }
-        p { color: #94a3b8; font-size: 15px; margin-bottom: 15px; }
+        p { color: #94a3b8; font-size: 15px; margin-bottom: 20px; }
+        
+        /* Кнопка Старта */
+        .start-btn { padding: 15px 40px; background: #22c55e; border: none; border-radius: 8px; color: #fff; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 4px 14px rgba(34, 197, 94, 0.4); transition: 0.2s; margin-bottom: 15px; }
+        .start-btn:hover { background: #16a34a; transform: scale(1.02); }
+        .start-btn:active { transform: scale(0.98); }
+        
         .status { text-align: center; color: #38bdf8; margin-bottom: 5px; font-size: 14px; font-weight: 500; }
-        .timer { text-align: center; color: #64748b; margin-bottom: 20px; font-size: 12px; }
+        .timer { text-align: center; color: #64748b; margin-bottom: 20px; font-size: 12px; display: none; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; max-width: 1200px; margin: 0 auto; }
         .card { background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 12px; display: flex; flex-direction: column; justify-content: space-between; }
         .type-badge { display: inline-block; padding: 4px 8px; background: #0369a1; color: #e0f2fe; border-radius: 6px; font-size: 11px; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; align-self: flex-start; }
@@ -26,35 +32,62 @@
 
     <header>
         <h1>VPN Key Aggregator</h1>
-        <p>Сбор конфигураций из нового источника с автообновлением</p>
-        <div class="status" id="status">Запуск автопоиска конфигураций...</div>
+        <p>Сбор конфигураций из источника bypass-1.txt с защитой от ошибок сети</p>
+        
+        <!-- Новая кнопка ручного запуска -->
+        <button class="start-btn" id="startBtn" onclick="manualStart()">Начать поиск</button>
+        
+        <div class="status" id="status">Нажмите кнопку выше, чтобы запустить поиск ключей...</div>
         <div class="timer" id="timer">До обновления: 03:00:00</div>
     </header>
 
     <div class="grid" id="container"></div>
 
     <script>
-        // Ваш новый источник конфигураций bypass-1.txt
-        const SOURCE_URL = 'https://raw.githubusercontent.com/whoahaow/rjsxrd/refs/heads/main/githubmirror/bypass/bypass-1.txt';
-        const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; // Интервал обновления — 3 часа
+        const SOURCE_URL = 'https://githubusercontent.com';
+        const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; // 3 часа
         
         let allKeys = [];
         let timeLeft = UPDATE_INTERVAL;
         let timerInterval;
 
-        // Поиск и обработка запускаются автоматически
-        async function autoFetchKeys() {
+        // Список резервных CORS-прокси для стопроцентной стабильности
+        const PROXIES = [
+            (url) => `https://corsproxy.io{encodeURIComponent(url)}`,
+            (url) => `https://codetabs.com{encodeURIComponent(url)}`,
+            (url) => `https://allorigins.win{encodeURIComponent(url)}`
+        ];
+
+        function manualStart() {
+            document.getElementById('startBtn').style.display = 'none'; // Скрываем кнопку после нажатия
+            document.getElementById('timer').style.style.display = 'block'; // Показываем таймер
+            fetchKeysWithRetry(0); // Запускаем загрузку с первого прокси
+        }
+
+        // Умная функция загрузки: если один прокси падает, берет следующий
+        async function fetchKeysWithRetry(proxyIndex) {
             const statusEl = document.getElementById('status');
-            statusEl.innerText = "Поиск свежих ключей в новом источнику...";
+            
+            if (proxyIndex >= PROXIES.length) {
+                statusEl.innerText = "🔴 Все резервные серверы перегружены. Попробуйте нажать кнопку еще раз через минуту.";
+                document.getElementById('startBtn').style.display = 'inline-block';
+                return;
+            }
+
+            statusEl.innerText = `Поиск ключей (используется резервный канал ${proxyIndex + 1})...`;
+            
             try {
-                const cacheBuster = `&cb=${Date.now()}`;
-                const response = await fetch('https://allorigins.win' + encodeURIComponent(SOURCE_URL) + cacheBuster);
-                if (!response.ok) throw new Error("Ошибка сети");
+                const cacheBuster = `?cb=${Date.now()}`;
+                const proxyUrl = PROXIES[proxyIndex](SOURCE_URL + cacheBuster);
+                
+                const response = await fetch(proxyUrl);
+                if (!response.ok) throw new Error("Ошибка прокси-сервера");
                 
                 const text = await response.text();
-                // Разбиваем на строки и убираем пустые
                 const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 10);
                 
+                if (lines.length === 0) throw new Error("Файл пуст");
+
                 allKeys = lines.map((key, index) => {
                     let type = "UNKNOWN";
                     if (key.startsWith("vless://")) type = "VLESS";
@@ -65,13 +98,11 @@
 
                     const newName = `Бесплатный VPN #${index + 1}`;
 
-                    // Отрезаем оригинальное имя сервера после символа #
                     let cleanKey = key;
                     if (key.includes('#')) {
                         cleanKey = key.split('#')[0];
                     }
                     
-                    // Добавляем новое имя «Бесплатный VPN» в конец строки
                     let finalKey = cleanKey;
                     if (type !== "VMess") {
                         finalKey = `${cleanKey}#${encodeURIComponent(newName)}`;
@@ -85,8 +116,9 @@
                 resetTimer();
 
             } catch (error) {
-                console.error(error);
-                statusEl.innerText = "🔴 Ошибка автопоиска. Повторная попытка через 3 часа.";
+                console.warn(`Прокси ${proxyIndex + 1} дал сбой, переключаемся...`);
+                // Рекурсивный переход к следующему источнику при ошибке
+                fetchKeysWithRetry(proxyIndex + 1);
             }
         }
 
@@ -98,7 +130,7 @@
             timerInterval = setInterval(() => {
                 timeLeft -= 1000;
                 if (timeLeft <= 0) {
-                    autoFetchKeys();
+                    fetchKeysWithRetry(0); // Автообновление через 3 часа начнется автоматом
                 } else {
                     updateTimerDisplay();
                 }
@@ -111,7 +143,7 @@
             const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
             
             const pad = (num) => String(num).padStart(2, '0');
-            document.getElementById('timer').innerText = `Следующее автообновление через: ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+            document.getElementById('timer').innerText = `Следующее фоновое автообновление через: ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
         }
 
         function render(data) {
@@ -147,9 +179,6 @@
         function escapeHtml(text) {
             return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         }
-
-        // Автозапуск при загрузке страницы
-        window.onload = autoFetchKeys;
     </script>
 </body>
 </html>
