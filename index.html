@@ -31,7 +31,7 @@
 
     <header>
         <h1>VPN Key Aggregator</h1>
-        <p>Полный сбор всех конфигураций через высокоскоростное зеркало GitMirror</p>
+        <p>Сбор всех конфигураций через защищенный канал обхода блокировок</p>
         
         <button class="start-btn" id="startBtn" onclick="manualStart()">Начать поиск</button>
         
@@ -42,8 +42,11 @@
     <div class="grid" id="container"></div>
 
     <script>
-        // Используем прямое скоростное зеркало, которое открыто для браузеров и не требует прокси
-        const MIRROR_URL = 'https://gitmirror.com';
+        // Маскируем ссылку разбитием на части, чтобы блокировщики рекламы её не перехватили
+        const _p1 = "https://raw.";
+        const _p2 = "gitmirror";
+        const _p3 = ".com/whoahaow/rjsxrd/main/githubmirror/bypass/bypass-1.txt";
+        
         const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; // 3 часа
         
         let allKeys = [];
@@ -54,10 +57,9 @@
             document.getElementById('startBtn').style.display = 'none'; 
             document.getElementById('timer').style.display = 'block';
             
-            // 1. Изменение статуса СРАЗУ после клика (согласно инструкции)
+            // 1. Статус СРАЗУ после клика (согласно вашей инструкции)
             document.getElementById('status').innerText = "Процесс запущен. Пожалуйста, подождите...";
             
-            // Небольшая задержка перед запросом
             setTimeout(fetchKeys, 500); 
         }
 
@@ -65,21 +67,23 @@
             const statusEl = document.getElementById('status');
             
             // 2. Короткий статус во время непосредственного скачивания данных
-            statusEl.innerText = "Process запущен...";
+            statusEl.innerText = "Процесс запущен...";
             
             try {
-                // Добавляем параметр случайного времени, чтобы файл всегда брался свежим
-                const response = await fetch(`${MIRROR_URL}?v=${Date.now()}`);
-                if (!response.ok) throw new Error("Сбой ответа зеркала");
+                // Собираем замаскированную ссылку воедино
+                const FINAL_URL = _p1 + _p2 + _p3;
+                
+                const response = await fetch(`${FINAL_URL}?v=${Date.now()}`);
+                if (!response.ok) throw new Error("Ошибка сети");
                 
                 const text = await response.text();
                 
-                // Фильтруем строки, отсекая пустые элементы
+                // Фильтруем и чистим строки от мусора
                 const lines = text.split('\n')
                                   .map(line => line.trim())
                                   .filter(line => line.length > 20 && (line.includes('://') || line.startsWith('ss://')));
                 
-                if (lines.length === 0) throw new Error("Файл пуст");
+                if (lines.length === 0) throw new Error("Пусто");
 
                 allKeys = lines.map((key, index) => {
                     let type = "UNKNOWN";
@@ -91,13 +95,11 @@
 
                     const newName = `Бесплатный VPN #${index + 1}`;
 
-                    // Отрезаем оригинальное имя сервера
                     let cleanKey = key;
                     if (key.includes('#')) {
                         cleanKey = key.split('#');
                     }
                     
-                    // Вшиваем новое имя «Бесплатный VPN»
                     let finalKey = cleanKey;
                     if (type !== "VMess") {
                         finalKey = `${cleanKey}#${encodeURIComponent(newName)}`;
@@ -106,7 +108,7 @@
                     return { type, name: newName, rawKey: finalKey };
                 });
 
-                // 3. Финальный победный статус при выводе всех карточек
+                // 3. Финальный победный статус при успешном выводе всех карточек
                 statusEl.innerText = `🟢 Процесс успешно завершен! Найдено и переименовано ключей: ${allKeys.length}`;
                 render(allKeys);
                 resetTimer();
