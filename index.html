@@ -26,7 +26,7 @@
 
     <header>
         <h1>VPN Key Aggregator</h1>
-        <p>Полностью автоматический сбор и переименование конфигураций</p>
+        <p>Сбор конфигураций из нового источника с автообновлением</p>
         <div class="status" id="status">Запуск автопоиска конфигураций...</div>
         <div class="timer" id="timer">До обновления: 03:00:00</div>
     </header>
@@ -34,23 +34,25 @@
     <div class="grid" id="container"></div>
 
     <script>
-        const SOURCE_URL = 'https://githubusercontent.com';
-        const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; // 3 часа
+        // Ваш новый источник конфигураций bypass-1.txt
+        const SOURCE_URL = 'https://raw.githubusercontent.com/whoahaow/rjsxrd/refs/heads/main/githubmirror/bypass/bypass-1.txt';
+        const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; // Интервал обновления — 3 часа
         
         let allKeys = [];
         let timeLeft = UPDATE_INTERVAL;
         let timerInterval;
 
-        // Поиск и обработка запускаются сами
+        // Поиск и обработка запускаются автоматически
         async function autoFetchKeys() {
             const statusEl = document.getElementById('status');
-            statusEl.innerText = "Поиск свежих ключей в открытых источниках...";
+            statusEl.innerText = "Поиск свежих ключей в новом источнику...";
             try {
                 const cacheBuster = `&cb=${Date.now()}`;
                 const response = await fetch('https://allorigins.win' + encodeURIComponent(SOURCE_URL) + cacheBuster);
                 if (!response.ok) throw new Error("Ошибка сети");
                 
                 const text = await response.text();
+                // Разбиваем на строки и убираем пустые
                 const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 10);
                 
                 allKeys = lines.map((key, index) => {
@@ -63,11 +65,13 @@
 
                     const newName = `Бесплатный VPN #${index + 1}`;
 
+                    // Отрезаем оригинальное имя сервера после символа #
                     let cleanKey = key;
                     if (key.includes('#')) {
-                        cleanKey = key.split('#');
+                        cleanKey = key.split('#')[0];
                     }
                     
+                    // Добавляем новое имя «Бесплатный VPN» в конец строки
                     let finalKey = cleanKey;
                     if (type !== "VMess") {
                         finalKey = `${cleanKey}#${encodeURIComponent(newName)}`;
@@ -76,13 +80,13 @@
                     return { type, name: newName, rawKey: finalKey };
                 });
 
-                statusEl.innerText = `✨ Найдено и переименовано ключей: ${allKeys.length}`;
+                statusEl.innerText = `✨ Успешно найдено и переименовано ключей: ${allKeys.length}`;
                 render(allKeys);
                 resetTimer();
 
             } catch (error) {
                 console.error(error);
-                statusEl.innerText = "🔴 Ошибка автопоиска. Попытка через 3 часа.";
+                statusEl.innerText = "🔴 Ошибка автопоиска. Повторная попытка через 3 часа.";
             }
         }
 
@@ -144,7 +148,7 @@
             return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         }
 
-        // Запуск при старте сайта
+        // Автозапуск при загрузке страницы
         window.onload = autoFetchKeys;
     </script>
 </body>
