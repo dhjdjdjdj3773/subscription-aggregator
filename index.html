@@ -31,7 +31,7 @@
 
     <header>
         <h1>VPN Key Aggregator</h1>
-        <p>Многоканальный сбор конфигураций из файла bypass-1.txt с обходом блокировок провайдеров</p>
+        <p>Парсинг полноценной базы конфигураций bypass-1.txt через официальный API GitHub</p>
         
         <button class="start-btn" id="startBtn" onclick="manualStart()">Начать поиск</button>
         
@@ -42,64 +42,55 @@
     <div class="grid" id="container"></div>
 
     <script>
-        const RAW_URL = 'https://githubusercontent.com';
-        const MIRROR_URL = 'https://gitmirror.com';
+        // Официальный и точный эндпоинт API GitHub для вашей папки bypass
+        const GITHUB_API_URL = 'https://github.com';
         const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; // 3 часа
         
         let allKeys = [];
         let timeLeft = UPDATE_INTERVAL;
         let timerInterval;
 
-        // Три независимых шлюза доставки данных
-        const GATEWAYS = [
-            (cb) => `https://allorigins.win{encodeURIComponent(RAW_URL)}&cb=${cb}`,
-            (cb) => `https://corsproxy.io{encodeURIComponent(MIRROR_URL)}&cb=${cb}`,
-            (cb) => `${MIRROR_URL}?v=${cb}`
-        ];
-
         function manualStart() {
             document.getElementById('startBtn').style.display = 'none'; 
             document.getElementById('timer').style.display = 'block';
             
-            // 1. Текст СРАЗУ после клика (по вашей инструкции)
+            // 1. Статус мгновенно после вашего клика по кнопке
             document.getElementById('status').innerText = "Процесс запущен. Пожалуйста, подождите...";
             
-            setTimeout(() => {
-                tryFetchWithRetry(0);
-            }, 400); 
+            // Даем небольшую паузу (400мс), чтобы интерфейс зафиксировал первую надпись
+            setTimeout(fetchKeys, 400); 
         }
 
-        async function tryFetchWithRetry(index) {
+        async function fetchKeys() {
             const statusEl = document.getElementById('status');
             
-            // Если все шлюзы упали (что маловероятно), выводим ошибку
-            if (index >= GATEWAYS.length) {
-                statusEl.innerText = "🔴 Не удалось подключиться к удаленной базе. Пожалуйста, нажмите кнопку еще раз.";
-                document.getElementById('startBtn').style.display = 'inline-block';
-                document.getElementById('timer').style.display = 'none';
-                return;
-            }
-
-            // 2. Короткий статус во время непосредственной попытки загрузки данных
+            // 2. Короткий статус непосредственно во время скачивания данных
             statusEl.innerText = "Процесс запущен...";
             
             try {
-                const timestamp = Date.now();
-                const currentUrl = GATEWAYS[index](timestamp);
+                // Запрашиваем данные напрямую с серверов GitHub, минуя сторонние кэширующие прокси
+                const response = await fetch(`${GITHUB_API_URL}?t=${Date.now()}`);
+                if (!response.ok) throw new Error("API вернул ошибку связи");
                 
-                const response = await fetch(currentUrl);
-                if (!response.ok) throw new Error("Шлюз недоступен");
+                const data = await response.json();
                 
-                const text = await response.text();
+                // Декодируем Base64, очищая его от системных переносов строк GitHub (\n)
+                const base64Clean = data.content.replace(/\s/g, '');
+                const binaryString = atob(base64Clean);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                const text = new TextDecoder('utf-8').decode(bytes);
                 
-                // Фильтруем строки
+                // Разбиваем массив на строки, отсекаем пустые элементы
                 const lines = text.split('\n')
                                   .map(line => line.trim())
                                   .filter(line => line.length > 20 && (line.includes('://') || line.startsWith('ss://')));
                 
-                if (lines.length === 0) throw new Error("Пустой ответ");
+                if (lines.length === 0) throw new Error("Файл пуст");
 
-                allKeys = lines.map((key, idx) => {
+                allKeys = lines.map((key, index) => {
                     let type = "UNKNOWN";
                     if (key.startsWith("vless://")) type = "VLESS";
                     else if (key.startsWith("vmess://")) type = "VMess";
@@ -107,13 +98,15 @@
                     else if (key.startsWith("ssr://")) type = "Shadowsocks R";
                     else if (key.startsWith("trojan://")) type = "Trojan";
 
-                    const newName = `Бесплатный VPN #${idx + 1}`;
+                    const newName = `Бесплатный VPN #${index + 1}`;
 
+                    // Очищаем хвост оригинального имени сервера
                     let cleanKey = key;
                     if (key.includes('#')) {
-                        cleanKey = key.split('#');
+                        cleanKey = key.split('#')[0];
                     }
                     
+                    // Принудительно вшиваем новое имя в строку конфигурации
                     let finalKey = cleanKey;
                     if (type !== "VMess") {
                         finalKey = `${cleanKey}#${encodeURIComponent(newName)}`;
@@ -122,15 +115,16 @@
                     return { type, name: newName, rawKey: finalKey };
                 });
 
-                // 3. Финальный победный статус при успешном выводе карточек
+                // 3. Вывод финального успешного статуса со всей сотней найденных ключей
                 statusEl.innerText = `🟢 Процесс успешно завершен! Найдено и переименовано ключей: ${allKeys.length}`;
                 render(allKeys);
                 resetTimer();
 
             } catch (error) {
-                console.warn(`Шлюз №${index + 1} заблокирован, переключаюсь на резервный канал...`);
-                // Рекурсивный переход к следующему шлюзу доставки данных при сбое
-                tryFetchWithRetry(index + 1);
+                console.error(error);
+                statusEl.innerText = "🔴 Не удалось подключиться к удаленной базе. Пожалуйста, нажмите кнопку еще раз.";
+                document.getElementById('startBtn').style.display = 'inline-block';
+                document.getElementById('timer').style.display = 'none';
             }
         }
 
@@ -142,7 +136,7 @@
             timerInterval = setInterval(() => {
                 timeLeft -= 1000;
                 if (timeLeft <= 0) {
-                    tryFetchWithRetry(0); 
+                    fetchKeys(); 
                 } else {
                     updateTimerDisplay();
                 }
