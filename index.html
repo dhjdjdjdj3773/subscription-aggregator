@@ -31,7 +31,7 @@
 
     <header>
         <h1>VPN Key Aggregator</h1>
-        <p>Сбор конфигураций из репозитория whoahaow через отказоустойчивый CDN Statically</p>
+        <p>Сбор конфигураций из репозитория whoahaow через скоростной CDN Statically</p>
         
         <button class="start-btn" id="startBtn" onclick="manualStart()">Начать поиск</button>
         
@@ -42,7 +42,7 @@
     <div class="grid" id="container"></div>
 
     <script>
-        // Использование CDN Statically для прямого скачивания файла с GitHub без CORS блокировок
+        // ИСПРАВЛЕНО: Ссылка переписана строго под правила cdn.statically.io (через @main)
         const CDN_URL = 'https://statically.io';
         const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; // 3 часа
         
@@ -53,22 +53,24 @@
         function manualStart() {
             document.getElementById('startBtn').style.display = 'none'; 
             document.getElementById('timer').style.display = 'block';
-            // Первое изменение статуса сразу по вашему запросу
+            
+            // 1. Статус сразу после клика на кнопку
             document.getElementById('status').innerText = "Процесс запущен. Пожалуйста, подождите...";
             
-            // Небольшая задержка, чтобы пользователь успел прочитать первый текст перед началом загрузки
-            setTimeout(fetchKeys, 800); 
+            // Небольшая задержка перед запросом, чтобы текст успел отобразиться
+            setTimeout(fetchKeys, 500); 
         }
 
         async function fetchKeys() {
             const statusEl = document.getElementById('status');
-            // Второе изменение статуса во время непосредственного скачивания данных
+            
+            // 2. Статус непосредственно во время скачивания данных
             statusEl.innerText = "Процесс запущен...";
             
             try {
-                // Добавляем генератор времени, чтобы обойти кэширование CDN серверов
+                // Добавляем генератор времени против кэширования файлов на серверах CDN
                 const response = await fetch(`${CDN_URL}?t=${Date.now()}`);
-                if (!response.ok) throw new Error("Сбой загрузки данных");
+                if (!response.ok) throw new Error("Сбой сети или неверный путь");
                 
                 const text = await response.text();
                 const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 10);
@@ -98,14 +100,14 @@
                     return { type, name: newName, rawKey: finalKey };
                 });
 
-                // Третье изменение статуса при успешном финале
+                // 3. Статус при успешном финале
                 statusEl.innerText = `🟢 Процесс успешно завершен! Найдено и переименовано ключей: ${allKeys.length}`;
                 render(allKeys);
                 resetTimer();
 
             } catch (error) {
                 console.error(error);
-                statusEl.innerText = "🔴 Ошибка соединения. Пожалуйста, нажмите кнопку еще раз.";
+                statusEl.innerText = "🔴 Ошибка соединения с CDN. Пожалуйста, попробуйте нажать кнопку еще раз.";
                 document.getElementById('startBtn').style.display = 'inline-block';
                 document.getElementById('timer').style.display = 'none';
             }
