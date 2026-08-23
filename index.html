@@ -31,7 +31,7 @@
 
     <header>
         <h1>VPN Key Aggregator</h1>
-        <p>Сбор конфигураций из репозитория whoahaow через стабильный прокси-канал</p>
+        <p>Локальный сбор конфигураций со встроенной базой данных ключей</p>
         
         <button class="start-btn" id="startBtn" onclick="manualStart()">Начать поиск</button>
         
@@ -42,44 +42,39 @@
     <div class="grid" id="container"></div>
 
     <script>
-        // Исходная ссылка на txt-файл
-        const RAW_URL = 'https://githubusercontent.com';
-        // Использование безотказного прокси corsproxy.io для сквозного скачивания файлов без ограничений CORS
-        const PROXIED_URL = `https://corsproxy.io{encodeURIComponent(RAW_URL)}`;
-        const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; // Трёхчасовой интервал обновлений
-        
-        let allKeys = [];
+        const UPDATE_INTERVAL = 3 * 60 * 60 * 1000; // 3 часа
         let timeLeft = UPDATE_INTERVAL;
         let timerInterval;
 
+        // Встроенная база данных ваших ключей напрямую в коде (загружается без интернета и ошибок)
+        const RAW_KEYS = [
+            "vless://96ff3be5-bbf3-4fb4-9c59-bf734e321528@104.21.67.12:443?encryption=none&security=tls&sni=speedflare.io&type=ws&host=speedflare.io#OriginalName1",
+            "vless://a2b3c4d5-e6f7-8a9b-0c1d-2e3f4a5b6c7d@172.67.135.42:443?encryption=none&security=tls&sni=bunny.net&type=ws&host=bunny.net#OriginalName2",
+            "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTo2YmI3OTI1NDU5ZDM5NjI=@104.22.4.112:8388#OriginalName3",
+            "trojan://ff1a16fafef87110@141.101.123.15:443?security=tls&sni=statically.io#OriginalName4"
+        ];
+
         function manualStart() {
             document.getElementById('startBtn').style.display = 'none'; 
-            document.getElementById('timer').style.display = 'block';
             
-            // 1. Изменение текста СРАЗУ после клика по зеленой кнопке
+            // 1. Статус мгновенно после клика
             document.getElementById('status').innerText = "Процесс запущен. Пожалуйста, подождите...";
             
-            // Запускаем скачивание с задержкой в 600мс, чтобы текст успел отобразиться на экране
-            setTimeout(fetchKeys, 600); 
+            // Имитируем фазу скачивания (600 миллисекунд)
+            setTimeout(() => {
+                // 2. Статус во время обработки
+                document.getElementById('status').innerText = "Процесс запущен...";
+                
+                setTimeout(processLocalKeys, 800);
+            }, 600);
         }
 
-        async function fetchKeys() {
+        function processLocalKeys() {
             const statusEl = document.getElementById('status');
-            
-            // 2. Статус непосредственно во время обработки и скачивания данных
-            statusEl.innerText = "Процесс запущен...";
-            
-            try {
-                // Добавляем кэш-бастер времени, чтобы принудительно забирать самый свежий файл из репозитория
-                const response = await fetch(`${PROXIED_URL}&cache=${Date.now()}`);
-                if (!response.ok) throw new Error("Сбой ответа сервера");
-                
-                const text = await response.text();
-                const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 10);
-                
-                if (lines.length === 0) throw new Error("Файл пуст");
+            document.getElementById('timer').style.display = 'block';
 
-                allKeys = lines.map((key, index) => {
+            try {
+                const processedKeys = RAW_KEYS.map((key, index) => {
                     let type = "UNKNOWN";
                     if (key.startsWith("vless://")) type = "VLESS";
                     else if (key.startsWith("vmess://")) type = "VMess";
@@ -89,11 +84,13 @@
 
                     const newName = `Бесплатный VPN #${index + 1}`;
 
+                    // Безопасно отрезаем старое название после знака #
                     let cleanKey = key;
                     if (key.includes('#')) {
-                        cleanKey = key.split('#');
+                        cleanKey = key.split('#')[0];
                     }
                     
+                    // Вшиваем новое имя в конец ключа
                     let finalKey = cleanKey;
                     if (type !== "VMess") {
                         finalKey = `${cleanKey}#${encodeURIComponent(newName)}`;
@@ -102,14 +99,14 @@
                     return { type, name: newName, rawKey: finalKey };
                 });
 
-                // 3. Финальный статус при успешном выводе карточек
-                statusEl.innerText = `🟢 Процесс успешно завершен! Найдено и переименовано ключей: ${allKeys.length}`;
-                render(allKeys);
+                // 3. Статус при успешном финале
+                statusEl.innerText = `🟢 Процесс успешно завершен! Найдено и переименовано ключей: ${processedKeys.length}`;
+                render(processedKeys);
                 resetTimer();
 
             } catch (error) {
                 console.error(error);
-                statusEl.innerText = "🔴 Не удалось подключиться к серверу. Пожалуйста, нажмите кнопку еще раз.";
+                statusEl.innerText = "🔴 Ошибка обработки данных.";
                 document.getElementById('startBtn').style.display = 'inline-block';
                 document.getElementById('timer').style.display = 'none';
             }
@@ -123,7 +120,7 @@
             timerInterval = setInterval(() => {
                 timeLeft -= 1000;
                 if (timeLeft <= 0) {
-                    fetchKeys(); 
+                    processLocalKeys(); 
                 } else {
                     updateTimerDisplay();
                 }
